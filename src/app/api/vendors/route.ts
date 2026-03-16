@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
         action: 'CREATE',
         entityType: 'Vendor',
         entityId: vendor.id,
-        newValues: validated as any,
+        newValues: JSON.stringify(validated),
       },
     })
 

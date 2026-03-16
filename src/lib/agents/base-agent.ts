@@ -43,10 +43,10 @@ export abstract class BaseAgent {
 
   private initializePrimaryLLM(): AzureChatOpenAI {
     // Primary: Azure AI Foundry with Claude Opus 4.6
-    console.log(`[${this.config.name}] Initializing primary LLM: Azure AI Foundry with Claude Opus 4.6 (Entra ID auth)`)
-
     const endpoint = process.env.AZURE_OPENAI_ENDPOINT
     const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'claude-opus-4-6'
+
+    console.log(`[${this.config.name}] Initializing primary LLM: endpoint=${endpoint}, deployment=${deploymentName}`)
 
     if (!endpoint) {
       throw new Error('Azure AI Foundry configuration missing. Please set AZURE_OPENAI_ENDPOINT environment variable and ensure you are logged in via "az login".')
@@ -63,6 +63,8 @@ export abstract class BaseAgent {
       azureOpenAIEndpoint: endpoint,
       azureOpenAIApiDeploymentName: deploymentName,
       azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-08-01-preview',
+      // Set model to deployment name to avoid LangChain sending wrong model name
+      model: deploymentName,
       temperature: this.config.temperature,
       maxTokens: this.config.maxTokens,
     })
@@ -70,10 +72,10 @@ export abstract class BaseAgent {
 
   private initializeFallbackLLM(): AzureChatOpenAI {
     // Fallback: Azure AI Foundry with Claude Opus 4.5
-    console.log(`[${this.config.name}] Initializing fallback LLM: Azure AI Foundry with Claude Opus 4.5 (Entra ID auth)`)
-
     const endpoint = process.env.AZURE_OPENAI_ENDPOINT
     const deploymentName = process.env.AZURE_OPENAI_FALLBACK_DEPLOYMENT_NAME || 'claude-opus-4-5'
+
+    console.log(`[${this.config.name}] Initializing fallback LLM: endpoint=${endpoint}, deployment=${deploymentName}`)
 
     if (!endpoint) {
       throw new Error('Azure AI Foundry configuration missing. Please set AZURE_OPENAI_ENDPOINT environment variable and ensure you are logged in via "az login".')
@@ -90,6 +92,8 @@ export abstract class BaseAgent {
       azureOpenAIEndpoint: endpoint,
       azureOpenAIApiDeploymentName: deploymentName,
       azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-08-01-preview',
+      // Set model to deployment name to avoid LangChain sending wrong model name
+      model: deploymentName,
       temperature: this.config.temperature,
       maxTokens: this.config.maxTokens,
     })
