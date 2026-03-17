@@ -8,11 +8,10 @@ done
 echo "Database is ready."
 
 echo "Applying database schema..."
-# Use node to run prisma CLI directly from node_modules
 node ./node_modules/prisma/build/index.js db push --skip-generate || echo "Schema push encountered an issue, continuing..."
 
-echo "Seeding database (if needed)..."
-node ./node_modules/prisma/build/index.js db seed || echo "Seed skipped or already applied."
+echo "Seeding database..."
+node ./prisma/seed.js || echo "Seed skipped or already applied."
 
 echo "Starting Next.js..."
 exec node server.js
