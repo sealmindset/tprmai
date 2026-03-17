@@ -24,7 +24,7 @@ import type {
 const SARA_CONFIG: AgentConfig = {
   name: 'SARA',
   description: 'Security Analysis & Risk Articulation Agent',
-  model: 'claude-opus-4-6',
+  tier: 'complex',
   temperature: 0.2,
   maxTokens: 4000,
 }

@@ -23,7 +23,7 @@ import type {
 const VERA_CONFIG: AgentConfig = {
   name: 'VERA',
   description: 'Vendor Evaluation & Risk Assessment Agent',
-  model: 'claude-opus-4-6',
+  tier: 'standard',
   temperature: 0.3,
   maxTokens: 2000,
 }

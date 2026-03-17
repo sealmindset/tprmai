@@ -7,10 +7,10 @@
 ## Medium Priority
 
 - [ ] **Testing: Add test suite** - No tests currently exist. Add Jest/Vitest for unit tests, Playwright for E2E
-- [ ] **Auth: Verify NextAuth setup** - Confirm authentication flow works with current configuration
 - [ ] **UI: Review component completeness** - Check if all pages listed in features are implemented
 - [ ] **AI Agents: Document agent workflows** - Create documentation for each agent's capabilities and triggers
 - [ ] **API: Document endpoints** - Create API documentation for all routes
+- [ ] **Tooling UX: Smoother /resume-it after /retrofit-it** - When a vibe coder exits Claude after using /retrofit-it and comes back via /resume-it, the experience feels disconnected. /resume-it should detect retrofit state, present clear context on what phase they're in, and make it obvious the user doesn't need to do anything technical -- just say what to work on next
 
 ## Low Priority
 
@@ -35,3 +35,6 @@
 - [x] **Docs: Update CLAUDE.MD** - Added Claude via Azure AI Foundry as primary AI provider
 - [x] **Clarify AI provider** - Claude via Azure AI Foundry is PRIMARY, OpenAI is optional alternative only
 - [x] **Replace xlsx with exceljs** - Fixed vulnerable xlsx dependency
+- [x] **Retrofit Phase A** - Docker, PostgreSQL, mock-oidc
+- [x] **Retrofit Phase B** - OIDC auth, database-driven RBAC, JWT sessions, admin UI, permission middleware
+- [x] **Retrofit Phase C** - Multi-provider AI abstraction, model tiering, LangChain removal

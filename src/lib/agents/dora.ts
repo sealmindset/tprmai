@@ -18,7 +18,7 @@ import type { AgentConfig, AgentResult, DocumentRequestInput } from './types'
 const DORA_CONFIG: AgentConfig = {
   name: 'DORA',
   description: 'Documentation & Outreach Retrieval Agent',
-  model: 'claude-opus-4-6',
+  tier: 'simple',
   temperature: 0.2,
   maxTokens: 2000,
 }

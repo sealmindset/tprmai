@@ -1,56 +1,18 @@
 import { NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { AzureChatOpenAI } from '@langchain/openai'
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity'
+import { chat } from '@/lib/ai/provider'
+import type { ChatMessage } from '@/lib/ai/provider'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 
 // Force dynamic to prevent static generation issues with pdf-parse
 export const dynamic = 'force-dynamic'
 
-// Azure AI Foundry cognitive services scope for token authentication
-const AZURE_COGNITIVE_SERVICES_SCOPE = 'https://cognitiveservices.azure.com/.default'
-
 // Lazy import pdf-parse to avoid build-time file loading issues
 const pdfParse = async (buffer: Buffer) => {
   const pdf = await import('pdf-parse')
   return pdf.default(buffer)
-}
-
-// Lazy initialization of Claude via Azure AI Foundry with Entra ID auth
-let _llm: AzureChatOpenAI | null = null
-let _credential: DefaultAzureCredential | null = null
-
-function getLLM(): AzureChatOpenAI {
-  if (!_llm) {
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT
-    const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'claude-opus-4-6'
-
-    if (!endpoint) {
-      throw new Error('Azure AI Foundry configuration missing. Please set AZURE_OPENAI_ENDPOINT environment variable and ensure you are logged in via "az login".')
-    }
-
-    // Use Entra ID authentication (az login, managed identity, etc.)
-    if (!_credential) {
-      _credential = new DefaultAzureCredential()
-    }
-
-    const azureADTokenProvider = getBearerTokenProvider(
-      _credential,
-      AZURE_COGNITIVE_SERVICES_SCOPE
-    )
-
-    _llm = new AzureChatOpenAI({
-      azureADTokenProvider,
-      azureOpenAIEndpoint: endpoint,
-      azureOpenAIApiDeploymentName: deploymentName,
-      azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-08-01-preview',
-      temperature: 0.3,
-      maxTokens: 4096,
-    })
-  }
-  return _llm
 }
 
 const ANALYSIS_PROMPT = `You are an expert Third Party Risk Management (TPRM) analyst.
@@ -119,9 +81,9 @@ async function extractXlsxText(buffer: Buffer): Promise<string> {
     await workbook.xlsx.read(stream)
     const texts: string[] = []
 
-    workbook.eachSheet((worksheet, sheetId) => {
+    workbook.eachSheet((worksheet) => {
       const rows: string[] = []
-      worksheet.eachRow((row, rowNumber) => {
+      worksheet.eachRow((row) => {
         const values = row.values as (string | number | boolean | Date | null | undefined)[]
         // row.values is 1-indexed, first element is undefined
         const rowData = values.slice(1).map(v => v?.toString() ?? '').join(',')
@@ -134,15 +96,6 @@ async function extractXlsxText(buffer: Buffer): Promise<string> {
   } catch (error) {
     console.error('XLSX extraction error:', error)
     throw new Error('Failed to extract XLSX content')
-  }
-}
-
-// Convert image to base64 for vision API
-function imageToBase64(buffer: Buffer, mimeType: string): { type: 'base64'; media_type: string; data: string } {
-  return {
-    type: 'base64',
-    media_type: mimeType,
-    data: buffer.toString('base64'),
   }
 }
 
@@ -173,6 +126,9 @@ function getImageMimeType(filename: string, originalMime: string): string {
 }
 
 export async function POST(request: Request) {
+  const denied = await requirePermission('documents', 'edit')
+  if (denied) return denied
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -188,7 +144,8 @@ export async function POST(request: Request) {
 
     let content: string = ''
     let isImage = false
-    let imageData: { type: 'base64'; media_type: string; data: string } | null = null
+    let imageBase64: string | null = null
+    let imageMime: string | null = null
 
     // Extract content based on file type
     switch (fileType) {
@@ -203,7 +160,8 @@ export async function POST(request: Request) {
         break
       case 'image':
         isImage = true
-        imageData = imageToBase64(buffer, getImageMimeType(file.name, file.type))
+        imageMime = getImageMimeType(file.name, file.type)
+        imageBase64 = buffer.toString('base64')
         break
       case 'text':
       default:
@@ -211,49 +169,46 @@ export async function POST(request: Request) {
         break
     }
 
-    // Analyze with Claude via Azure AI Foundry
-    const llm = getLLM()
-    let analysisText: string
+    // Analyze with AI provider
+    let messages: ChatMessage[]
 
-    if (isImage && imageData) {
-      // Use vision capability for images
-      const messages = [
-        new SystemMessage(ANALYSIS_PROMPT),
-        new HumanMessage({
+    if (isImage && imageBase64 && imageMime) {
+      messages = [
+        { role: 'system', content: ANALYSIS_PROMPT },
+        {
+          role: 'user',
           content: [
             {
               type: 'image_url',
-              image_url: {
-                url: `data:${imageData.media_type};base64,${imageData.data}`,
-              },
+              image_url: { url: `data:${imageMime};base64,${imageBase64}` },
             },
             {
               type: 'text',
               text: 'Analyze this vendor document image (likely an architecture diagram, certificate, or similar):',
             },
           ],
-        }),
+        },
       ]
-      const response = await llm.invoke(messages)
-      analysisText = response.content as string
     } else {
-      // Use text API for documents
-      const truncatedContent = content.slice(0, 100000) // Claude has ~200k context, leave room for prompt
-      const messages = [
-        new SystemMessage(ANALYSIS_PROMPT),
-        new HumanMessage(`Analyze this vendor document:\n\n${truncatedContent}`),
+      const truncatedContent = content.slice(0, 100000)
+      messages = [
+        { role: 'system', content: ANALYSIS_PROMPT },
+        { role: 'user', content: `Analyze this vendor document:\n\n${truncatedContent}` },
       ]
-      const response = await llm.invoke(messages)
-      analysisText = response.content as string
     }
+
+    const response = await chat(messages, {
+      temperature: 0.3,
+      maxTokens: 4096,
+      tier: 'complex',
+    })
 
     let analysis
     try {
-      // Extract JSON from response
-      const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
-      analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: 'Failed to parse', summary: analysisText }
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/)
+      analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: 'Failed to parse', summary: response.content }
     } catch {
-      analysis = { summary: analysisText, error: 'JSON parse failed' }
+      analysis = { summary: response.content, error: 'JSON parse failed' }
     }
 
     // Store document in database

@@ -1,11 +1,13 @@
 // Agent Types and Interfaces
 
+import type { ModelTier } from '@/lib/ai/provider'
+
 export type AgentName = 'VERA' | 'CARA' | 'DORA' | 'SARA' | 'RITA' | 'MARS'
 
 export interface AgentConfig {
   name: AgentName
   description: string
-  model: 'claude-opus-4-6' | 'claude-sonnet-4' | 'claude-3-opus' | 'claude-3-sonnet' | 'gpt-4o' | 'gpt-4-turbo'
+  tier: ModelTier  // complex, standard, or simple
   temperature: number
   maxTokens: number
 }

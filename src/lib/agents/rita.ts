@@ -18,7 +18,7 @@ import type { AgentConfig, AgentResult, ReportInput, ReportOutput } from './type
 const RITA_CONFIG: AgentConfig = {
   name: 'RITA',
   description: 'Report Intelligence & Threat Assessment Agent',
-  model: 'claude-opus-4-6',
+  tier: 'standard',
   temperature: 0.3,
   maxTokens: 4000,
 }

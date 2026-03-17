@@ -18,7 +18,7 @@ import type { AgentConfig, AgentResult, AssessmentInput, AssessmentOutput } from
 const CARA_CONFIG: AgentConfig = {
   name: 'CARA',
   description: 'Critical Assessment & Risk Analyzer Agent',
-  model: 'claude-opus-4-6',
+  tier: 'complex',
   temperature: 0.3,
   maxTokens: 3000,
 }
