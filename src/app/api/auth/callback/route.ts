@@ -8,6 +8,11 @@ import {
 } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
+  // Use the external frontend URL for all redirects (not request.url which
+  // resolves to the Docker-internal address like 0.0.0.0:3000)
+  const frontendUrl =
+    process.env.NEXTAUTH_URL || `http://localhost:${process.env.PORT || 3020}`
+
   try {
     const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
@@ -16,19 +21,16 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('OIDC error:', error, searchParams.get('error_description'))
       return NextResponse.redirect(
-        new URL('/login?error=oidc_denied', request.url)
+        new URL('/login?error=oidc_denied', frontendUrl)
       )
     }
 
     if (!code) {
       return NextResponse.redirect(
-        new URL('/login?error=no_code', request.url)
+        new URL('/login?error=no_code', frontendUrl)
       )
     }
 
-    // Build the same redirect_uri used in login
-    const frontendUrl =
-      process.env.NEXTAUTH_URL || `http://localhost:${process.env.PORT || 3020}`
     const redirectUri = `${frontendUrl}/api/auth/callback`
 
     // 1. Exchange authorization code for tokens
@@ -54,11 +56,11 @@ export async function GET(request: NextRequest) {
     await setAuthCookie(token)
 
     // 7. Redirect to dashboard
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    return NextResponse.redirect(new URL('/dashboard', frontendUrl))
   } catch (error) {
     console.error('Auth callback error:', error)
     return NextResponse.redirect(
-      new URL('/login?error=auth_failed', request.url)
+      new URL('/login?error=auth_failed', frontendUrl)
     )
   }
 }

@@ -54,7 +54,7 @@ export class DORAAgent extends BaseAgent {
     super(DORA_CONFIG)
   }
 
-  protected getSystemPrompt(): string {
+  protected getDefaultSystemPrompt(): string {
     return `You are DORA (Documentation & Outreach Retrieval Agent), an AI specialist in managing vendor security documentation for Sleep Number Corporation.
 
 Your role is to:

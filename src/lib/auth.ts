@@ -59,11 +59,15 @@ export async function verifyToken(token: string): Promise<AuthMe | null> {
 // Cookie Operations
 // ============================================
 
+// Derive cookie Secure flag from the actual frontend URL protocol, not NODE_ENV.
+// In Docker dev, NODE_ENV=production but the frontend is http://localhost:3020.
+const COOKIE_SECURE = process.env.NEXTAUTH_URL?.startsWith('https') ?? false
+
 export async function setAuthCookie(token: string): Promise<void> {
   const cookieStore = await cookies()
   cookieStore.set(TOKEN_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: COOKIE_SECURE,
     sameSite: 'lax',
     path: '/',
     maxAge: 8 * 60 * 60, // 8 hours
@@ -74,7 +78,7 @@ export async function clearAuthCookie(): Promise<void> {
   const cookieStore = await cookies()
   cookieStore.set(TOKEN_COOKIE, '', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: COOKIE_SECURE,
     sameSite: 'lax',
     path: '/',
     maxAge: 0,

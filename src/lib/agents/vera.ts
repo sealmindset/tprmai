@@ -33,7 +33,7 @@ export class VERAAgent extends BaseAgent {
     super(VERA_CONFIG)
   }
 
-  protected getSystemPrompt(): string {
+  protected getDefaultSystemPrompt(): string {
     return `You are VERA (Vendor Evaluation & Risk Assessment Agent), an AI specialist in third-party vendor risk profiling for Sleep Number Corporation.
 
 Your role is to analyze vendor information and determine their risk profile based on:

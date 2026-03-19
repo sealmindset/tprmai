@@ -16,6 +16,7 @@ import {
   Shield,
   Users,
   KeyRound,
+  MessageSquare,
 } from 'lucide-react'
 
 interface NavItem {
@@ -38,6 +39,7 @@ const navigation: NavItem[] = [
 const adminNavigation: NavItem[] = [
   { name: 'Users', href: '/admin/users', icon: Users, permission: 'users.view' },
   { name: 'Roles', href: '/admin/roles', icon: KeyRound, permission: 'roles.view' },
+  { name: 'Prompts', href: '/admin/prompts', icon: MessageSquare, permission: 'prompts.view' },
   { name: 'Settings', href: '/settings', icon: Settings, permission: 'settings.view' },
 ]
 

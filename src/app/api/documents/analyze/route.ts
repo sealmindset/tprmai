@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/auth'
+import { requirePermission, getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { chat } from '@/lib/ai/provider'
 import type { ChatMessage } from '@/lib/ai/provider'
+import { aiRateLimit } from '@/lib/ai/rate-limit'
+import { sanitizeAIError } from '@/lib/ai/errors'
+import { maskPII, unmaskPII } from '@/lib/ai/pii-masker'
+import { validateDocumentSize } from '@/lib/ai/sanitize'
+import { safeParseJSON } from '@/lib/ai/validate'
+import { SAFETY_PREAMBLE } from '@/lib/ai/safety-preamble'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 
@@ -129,6 +135,13 @@ export async function POST(request: Request) {
   const denied = await requirePermission('documents', 'edit')
   if (denied) return denied
 
+  // Rate limit check
+  const user = await getCurrentUser()
+  if (user) {
+    const limited = aiRateLimit(user.id)
+    if (limited) return limited
+  }
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -169,12 +182,26 @@ export async function POST(request: Request) {
         break
     }
 
-    // Analyze with AI provider
+    // Validate document size
+    if (!isImage) {
+      const sizeError = validateDocumentSize(content)
+      if (sizeError) {
+        return NextResponse.json({ error: sizeError }, { status: 400 })
+      }
+    }
+
+    // Mask PII before sending to AI provider
+    const { maskedText: maskedContent, mappings: piiMappings } = isImage
+      ? { maskedText: content, mappings: [] }
+      : maskPII(content)
+
+    // Analyze with AI provider (prepend safety preamble)
+    const systemPromptWithPreamble = SAFETY_PREAMBLE + ANALYSIS_PROMPT
     let messages: ChatMessage[]
 
     if (isImage && imageBase64 && imageMime) {
       messages = [
-        { role: 'system', content: ANALYSIS_PROMPT },
+        { role: 'system', content: systemPromptWithPreamble },
         {
           role: 'user',
           content: [
@@ -190,10 +217,10 @@ export async function POST(request: Request) {
         },
       ]
     } else {
-      const truncatedContent = content.slice(0, 100000)
+      const truncatedContent = maskedContent.slice(0, 100000)
       messages = [
-        { role: 'system', content: ANALYSIS_PROMPT },
-        { role: 'user', content: `Analyze this vendor document:\n\n${truncatedContent}` },
+        { role: 'system', content: systemPromptWithPreamble },
+        { role: 'user', content: `Analyze this vendor document:\n\n<user_input>\n${truncatedContent}\n</user_input>` },
       ]
     }
 
@@ -203,12 +230,17 @@ export async function POST(request: Request) {
       tier: 'complex',
     })
 
-    let analysis
-    try {
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/)
-      analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: 'Failed to parse', summary: response.content }
-    } catch {
-      analysis = { summary: response.content, error: 'JSON parse failed' }
+    // Restore PII in the response
+    const unmaskedResponse = unmaskPII(response.content, piiMappings)
+
+    // Safe JSON parse
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let analysis: any
+    const parsed = safeParseJSON<Record<string, unknown>>(unmaskedResponse)
+    if (parsed.success) {
+      analysis = parsed.data
+    } else {
+      analysis = { summary: unmaskedResponse, error: 'JSON parse failed' }
     }
 
     // Store document in database
@@ -247,10 +279,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ analysis })
   } catch (error) {
-    console.error('Document analysis error:', error)
+    const safe = sanitizeAIError(error)
     return NextResponse.json(
-      { error: 'Analysis failed', details: String(error) },
-      { status: 500 }
+      { error: safe.message },
+      { status: safe.status }
     )
   }
 }

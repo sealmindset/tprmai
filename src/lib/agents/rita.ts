@@ -28,7 +28,7 @@ export class RITAAgent extends BaseAgent {
     super(RITA_CONFIG)
   }
 
-  protected getSystemPrompt(): string {
+  protected getDefaultSystemPrompt(): string {
     return `You are RITA (Report Intelligence & Threat Assessment Agent), an AI specialist in generating third-party risk reports for Sleep Number Corporation.
 
 Your role is to create comprehensive, actionable risk reports for various audiences:

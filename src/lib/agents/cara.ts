@@ -28,7 +28,7 @@ export class CARAAgent extends BaseAgent {
     super(CARA_CONFIG)
   }
 
-  protected getSystemPrompt(): string {
+  protected getDefaultSystemPrompt(): string {
     return `You are CARA (Critical Assessment & Risk Analyzer Agent), an AI specialist in conducting detailed vendor risk assessments for Sleep Number Corporation.
 
 Your role is to perform comprehensive risk assessments across multiple dimensions:

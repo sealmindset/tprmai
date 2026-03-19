@@ -8,6 +8,10 @@ const JWT_SECRET = new TextEncoder().encode(
 // Pages that don't require authentication
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/callback']
 
+// External frontend URL for redirects (not request.url which is Docker-internal)
+const FRONTEND_URL =
+  process.env.NEXTAUTH_URL || `http://localhost:${process.env.PORT || 3020}`
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -32,7 +36,7 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/login', FRONTEND_URL))
   }
 
   // Verify JWT
@@ -44,7 +48,7 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/login', FRONTEND_URL))
   }
 }
 

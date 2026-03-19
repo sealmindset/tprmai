@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/auth'
+import { requirePermission, getCurrentUser } from '@/lib/auth'
+import { aiRateLimit } from '@/lib/ai/rate-limit'
+import { sanitizeAIError } from '@/lib/ai/errors'
 import { sara } from '@/lib/agents'
 import prisma from '@/lib/db'
 import { z } from 'zod'
@@ -12,6 +14,13 @@ const analysisRequestSchema = z.object({
 export async function POST(request: NextRequest) {
   const denied = await requirePermission('agents', 'create')
   if (denied) return denied
+
+  // Rate limit check
+  const user = await getCurrentUser()
+  if (user) {
+    const limited = aiRateLimit(user.id)
+    if (limited) return limited
+  }
 
   try {
     const body = await request.json()
@@ -94,10 +103,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.error('SARA agent error:', error)
+    const safe = sanitizeAIError(error)
     return NextResponse.json(
-      { error: 'Failed to execute document analysis' },
-      { status: 500 }
+      { error: safe.message },
+      { status: safe.status }
     )
   }
 }

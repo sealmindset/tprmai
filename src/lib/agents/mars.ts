@@ -47,7 +47,7 @@ export class MARSAgent extends BaseAgent {
     super(MARS_CONFIG)
   }
 
-  protected getSystemPrompt(): string {
+  protected getDefaultSystemPrompt(): string {
     return `You are MARS (Management, Action & Remediation Supervisor Agent), an AI specialist in managing vendor risk remediation for Sleep Number Corporation.
 
 Your role is to:

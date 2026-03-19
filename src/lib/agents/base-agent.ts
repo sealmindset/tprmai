@@ -1,6 +1,14 @@
 import { complete, completeJSON } from '@/lib/ai/provider'
+import { getPrompt } from '@/lib/prompts'
+import { sanitizePromptInput, wrapUserInput, validatePromptSize } from '@/lib/ai/sanitize'
+import { safeParseJSON } from '@/lib/ai/validate'
+import { maskPII, unmaskPII, type PiiMapping } from '@/lib/ai/pii-masker'
+import { sanitizeAIError } from '@/lib/ai/errors'
 import prisma from '@/lib/db'
 import type { AgentConfig, AgentResult, AgentLogEntry } from './types'
+
+// Re-export PiiMapping for agents that need it
+export type { PiiMapping }
 
 export abstract class BaseAgent {
   protected config: AgentConfig
@@ -9,28 +17,92 @@ export abstract class BaseAgent {
     this.config = config
   }
 
-  protected abstract getSystemPrompt(): string
+  /** Default system prompt (used as fallback if DB prompt not found). */
+  protected abstract getDefaultSystemPrompt(): string
+
+  /** DB slug for this agent's system prompt, e.g. "vera-system". */
+  protected get systemPromptSlug(): string {
+    return `${this.config.name.toLowerCase()}-system`
+  }
+
+  /** Load system prompt from DB (with safety preamble), falling back to the hardcoded default. */
+  protected async getSystemPrompt(): Promise<string> {
+    return getPrompt(this.systemPromptSlug, this.getDefaultSystemPrompt())
+  }
 
   protected async invoke(userPrompt: string): Promise<string> {
     console.log(`[${this.config.name}] Sending request (tier: ${this.config.tier})`)
 
-    const result = await complete(this.getSystemPrompt(), userPrompt, {
-      temperature: this.config.temperature,
-      maxTokens: this.config.maxTokens,
-      tier: this.config.tier,
-    })
+    // Sanitize and wrap user input
+    const sanitizedPrompt = wrapUserInput(userPrompt)
 
-    return result
+    // Validate prompt size
+    const sizeError = validatePromptSize(sanitizedPrompt)
+    if (sizeError) {
+      throw new Error(sizeError)
+    }
+
+    // Mask PII before sending to AI provider
+    const { maskedText, mappings } = maskPII(sanitizedPrompt)
+
+    const systemPrompt = await this.getSystemPrompt()
+
+    try {
+      const result = await complete(systemPrompt, maskedText, {
+        temperature: this.config.temperature,
+        maxTokens: this.config.maxTokens,
+        tier: this.config.tier,
+      })
+
+      // Restore PII in the response
+      return unmaskPII(result, mappings)
+    } catch (error) {
+      const safe = sanitizeAIError(error)
+      throw new Error(safe.message)
+    }
   }
 
   protected async invokeWithJSON<T>(userPrompt: string): Promise<T> {
     console.log(`[${this.config.name}] Sending JSON request (tier: ${this.config.tier})`)
 
-    return completeJSON<T>(this.getSystemPrompt(), userPrompt, {
-      temperature: this.config.temperature,
-      maxTokens: this.config.maxTokens,
-      tier: this.config.tier,
-    })
+    // Sanitize and wrap user input
+    const sanitizedPrompt = wrapUserInput(userPrompt)
+
+    // Validate prompt size
+    const sizeError = validatePromptSize(sanitizedPrompt)
+    if (sizeError) {
+      throw new Error(sizeError)
+    }
+
+    // Mask PII before sending to AI provider
+    const { maskedText, mappings } = maskPII(sanitizedPrompt)
+
+    const systemPrompt = await this.getSystemPrompt()
+
+    try {
+      const prompt = `${maskedText}\n\nIMPORTANT: Respond ONLY with valid JSON. Do not include any text before or after the JSON object.`
+      const text = await complete(systemPrompt, prompt, {
+        temperature: this.config.temperature,
+        maxTokens: this.config.maxTokens,
+        tier: this.config.tier,
+      })
+
+      // Restore PII in the response before parsing
+      const unmasked = unmaskPII(text, mappings)
+
+      // Safe JSON parse instead of raw JSON.parse
+      const parsed = safeParseJSON<T>(unmasked)
+      if (!parsed.success) {
+        throw new Error(parsed.error)
+      }
+      return parsed.data
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Failed to parse')) {
+        throw error
+      }
+      const safe = sanitizeAIError(error)
+      throw new Error(safe.message)
+    }
   }
 
   protected async logActivity(entry: Omit<AgentLogEntry, 'agentName'>): Promise<void> {

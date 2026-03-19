@@ -34,7 +34,7 @@ export class SARAAgent extends BaseAgent {
     super(SARA_CONFIG)
   }
 
-  protected getSystemPrompt(): string {
+  protected getDefaultSystemPrompt(): string {
     return `You are SARA (Security Analysis & Risk Articulation Agent), an AI specialist in analyzing vendor security documentation for Sleep Number Corporation.
 
 Your role is to:

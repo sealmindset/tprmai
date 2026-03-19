@@ -77,7 +77,7 @@ for u in _SEED_USERS:
 CLIENTS[CLIENT_ID] = {
     "client_id": CLIENT_ID,
     "client_secret": CLIENT_SECRET,
-    "redirect_uris": ["http://localhost:8002/auth/callback"],
+    "redirect_uris": ["http://localhost:3020/api/auth/callback"],
 }
 
 # ---------------------------------------------------------------------------

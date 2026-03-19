@@ -18,8 +18,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl)
   } catch (error) {
     console.error('Login error:', error)
+    const errorRedirectUrl =
+      process.env.NEXTAUTH_URL || `http://localhost:${process.env.PORT || 3020}`
     return NextResponse.redirect(
-      new URL('/login?error=oidc_unavailable', request.url)
+      new URL('/login?error=oidc_unavailable', errorRedirectUrl)
     )
   }
 }
