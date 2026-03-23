@@ -6,9 +6,11 @@ the application's four system roles. NOT Java -- Python only.
 """
 
 import hashlib
+import html
 import json
 import os
 import time
+import urllib.parse
 import uuid
 from typing import Any
 
@@ -87,6 +89,16 @@ CLIENTS[CLIENT_ID] = {
 app = FastAPI(title="Mock OIDC Provider", docs_url=None, redoc_url=None)
 
 
+def _validate_redirect_uri(client_id: str, redirect_uri: str) -> None:
+    """Reject redirect_uri values not registered for the client."""
+    client = CLIENTS.get(client_id)
+    if not client or redirect_uri not in client.get("redirect_uris", []):
+        raise HTTPException(
+            status_code=400,
+            detail=f"redirect_uri not registered for client: {redirect_uri}",
+        )
+
+
 # ---- Health ---------------------------------------------------------------
 
 @app.get("/health")
@@ -156,6 +168,9 @@ async def authorize(
     if not client:
         raise HTTPException(status_code=400, detail=f"Unknown client_id: {client_id}")
 
+    # Validate redirect_uri against registered URIs to prevent open redirect
+    _validate_redirect_uri(client_id, redirect_uri)
+
     # If login_hint provided and matches a user, auto-select
     if login_hint and login_hint in USERS:
         code = _issue_code(login_hint, client_id, redirect_uri, nonce)
@@ -165,20 +180,31 @@ async def authorize(
             location += f"&state={state}"
         return RedirectResponse(url=location, status_code=302)
 
-    # Render user picker HTML
+    # Render user picker HTML — escape all interpolated values to prevent XSS
     user_buttons = ""
     for sub, u in USERS.items():
+        safe_sub = html.escape(sub, quote=True)
+        safe_name = html.escape(u['name'], quote=True)
+        safe_email = html.escape(u['email'], quote=True)
         user_buttons += f"""
-        <button onclick="selectUser('{sub}')"
+        <button type="button" data-sub="{safe_sub}"
                 style="display:block;width:100%;padding:12px 16px;margin:8px 0;
                        border:1px solid #ddd;border-radius:8px;background:#fff;
                        cursor:pointer;text-align:left;font-size:14px;">
-            <strong>{u['name']}</strong><br>
-            <span style="color:#666;font-size:12px;">{u['email']} ({sub})</span>
+            <strong>{safe_name}</strong><br>
+            <span style="color:#666;font-size:12px;">{safe_email} ({safe_sub})</span>
         </button>
         """
 
-    html = f"""<!DOCTYPE html>
+    # Pass dynamic values via a JSON blob to avoid inline JS injection
+    js_config = json.dumps({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "nonce": nonce,
+    })
+
+    page_html = f"""<!DOCTYPE html>
 <html>
 <head><title>Mock OIDC Login</title></head>
 <body style="font-family:system-ui,-apple-system,sans-serif;max-width:400px;margin:60px auto;padding:20px;">
@@ -186,20 +212,25 @@ async def authorize(
     <p style="color:#666;text-align:center;">Select a user to sign in as:</p>
     {user_buttons}
     <script>
-    function selectUser(sub) {{
-        const params = new URLSearchParams({{
-            sub: sub,
-            client_id: '{client_id}',
-            redirect_uri: '{redirect_uri}',
-            state: '{state}',
-            nonce: '{nonce}'
+    (function() {{
+        var config = {js_config};
+        document.querySelectorAll('button[data-sub]').forEach(function(btn) {{
+            btn.addEventListener('click', function() {{
+                var params = new URLSearchParams({{
+                    sub: btn.getAttribute('data-sub'),
+                    client_id: config.client_id,
+                    redirect_uri: config.redirect_uri,
+                    state: config.state,
+                    nonce: config.nonce
+                }});
+                window.location.href = '/authorize/callback?' + params.toString();
+            }});
         }});
-        window.location.href = '/authorize/callback?' + params.toString();
-    }}
+    }})();
     </script>
 </body>
 </html>"""
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=page_html)
 
 
 @app.get("/authorize/callback")
@@ -213,6 +244,9 @@ async def authorize_callback(
     """Internal redirect after user picker selection."""
     if sub not in USERS:
         raise HTTPException(status_code=400, detail=f"Unknown user: {sub}")
+
+    # Validate redirect_uri against registered URIs to prevent open redirect
+    _validate_redirect_uri(client_id, redirect_uri)
 
     code = _issue_code(sub, client_id, redirect_uri, nonce)
     sep = "&" if "?" in redirect_uri else "?"
@@ -352,6 +386,19 @@ async def logout(
     state: str = Query(""),
 ):
     if post_logout_redirect_uri:
+        # Validate against all registered redirect URIs to prevent open redirect
+        allowed = {uri for c in CLIENTS.values() for uri in c.get("redirect_uris", [])}
+        parsed = urllib.parse.urlparse(post_logout_redirect_uri)
+        allowed_origins = {
+            f"{urllib.parse.urlparse(u).scheme}://{urllib.parse.urlparse(u).netloc}"
+            for u in allowed
+        }
+        request_origin = f"{parsed.scheme}://{parsed.netloc}"
+        if request_origin not in allowed_origins:
+            raise HTTPException(
+                status_code=400,
+                detail="post_logout_redirect_uri not allowed.",
+            )
         location = post_logout_redirect_uri
         if state:
             sep = "&" if "?" in location else "?"
