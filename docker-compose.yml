@@ -33,6 +33,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mock-oidc:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "node", "-e", "const http=require('http');http.get('http://127.0.0.1:3000',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"]
       interval: 10s
