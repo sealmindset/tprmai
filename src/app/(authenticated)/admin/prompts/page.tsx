@@ -5,14 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTable, Column } from '@/components/ui/data-table'
 import {
   Dialog,
   DialogContent,
@@ -51,13 +44,9 @@ interface PromptDetail extends ManagedPrompt {
   versions: PromptVersion[]
 }
 
-const AGENTS = ['VERA', 'CARA', 'DORA', 'SARA', 'RITA', 'MARS']
-
 export default function PromptsPage() {
   const [prompts, setPrompts] = useState<ManagedPrompt[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterAgent, setFilterAgent] = useState<string>('')
-  const [search, setSearch] = useState('')
 
   // Editor state
   const [editPrompt, setEditPrompt] = useState<PromptDetail | null>(null)
@@ -70,13 +59,11 @@ export default function PromptsPage() {
 
   useEffect(() => {
     fetchPrompts()
-  }, [filterAgent])
+  }, [])
 
   async function fetchPrompts() {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (filterAgent) params.set('agentName', filterAgent)
-    const res = await fetch(`/api/admin/prompts?${params}`)
+    const res = await fetch('/api/admin/prompts')
     if (res.ok) setPrompts(await res.json())
     setLoading(false)
   }
@@ -127,23 +114,101 @@ export default function PromptsPage() {
     fetchPrompts()
   }
 
-  const filtered = prompts.filter((p) => {
-    if (search) {
-      const q = search.toLowerCase()
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.slug.toLowerCase().includes(q) ||
-        p.agentName?.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q)
-      )
-    }
-    return true
-  })
-
-  const agentCounts = AGENTS.map((a) => ({
-    name: a,
-    count: prompts.filter((p) => p.agentName === a).length,
-  }))
+  const columns: Column<ManagedPrompt>[] = [
+    {
+      key: 'agentName',
+      header: 'Agent',
+      sortable: true,
+      filterable: true,
+      filterValue: (row) => row.agentName || 'System',
+      render: (row) => (
+        <div className="flex items-center gap-1.5">
+          <Bot className="h-4 w-4 text-muted-foreground" />
+          <span className="font-mono text-sm">{row.agentName || '—'}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'name',
+      header: 'Name',
+      sortable: true,
+      render: (row) => (
+        <div>
+          <div className="font-medium">{row.name}</div>
+          <div className="text-xs text-muted-foreground font-mono">{row.slug}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      filterable: true,
+      render: (row) => <Badge variant="outline">{row.category}</Badge>,
+    },
+    {
+      key: 'model',
+      header: 'Tier',
+      filterable: true,
+      filterValue: (row) => row.model || 'Default',
+      render: (row) => (
+        <span className="text-sm text-muted-foreground">{row.model || '—'}</span>
+      ),
+    },
+    {
+      key: '_count.versions',
+      header: 'Versions',
+      sortable: true,
+      className: 'text-center',
+      render: (row) => <span className="text-sm">{row._count.versions}</span>,
+    },
+    {
+      key: 'isActive',
+      header: 'Status',
+      filterable: true,
+      filterValue: (row) => row.isActive ? 'Active' : 'Inactive',
+      render: (row) => (
+        <Badge
+          variant={row.isActive ? 'low' : 'critical'}
+          className="cursor-pointer"
+          onClick={(e) => { e.stopPropagation(); toggleActive(row) }}
+        >
+          {row.isActive ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'updatedAt',
+      header: 'Last Updated',
+      sortable: true,
+      render: (row) => (
+        <div className="text-sm text-muted-foreground">
+          {new Date(row.updatedAt).toLocaleDateString()}
+          {row.updatedBy && <div className="text-xs">by {row.updatedBy}</div>}
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (row) => (
+        <div className="space-x-1" onClick={(e) => e.stopPropagation()}>
+          <Button size="sm" variant="outline" onClick={() => openEditor(row.id)}>
+            Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => openHistory(row.id)}
+            disabled={row._count.versions === 0}
+          >
+            <History className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
 
   return (
     <div className="space-y-6">
@@ -157,131 +222,18 @@ export default function PromptsPage() {
         </p>
       </div>
 
-      {/* Agent filter cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        <Card
-          className={`cursor-pointer transition-colors ${
-            !filterAgent ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
-          }`}
-          onClick={() => setFilterAgent('')}
-        >
-          <CardContent className="p-3 text-center">
-            <div className="text-lg font-bold">{prompts.length}</div>
-            <div className="text-xs text-muted-foreground">All Prompts</div>
-          </CardContent>
-        </Card>
-        {agentCounts.map((a) => (
-          <Card
-            key={a.name}
-            className={`cursor-pointer transition-colors ${
-              filterAgent === a.name ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
-            }`}
-            onClick={() => setFilterAgent(filterAgent === a.name ? '' : a.name)}
-          >
-            <CardContent className="p-3 text-center">
-              <div className="text-lg font-bold">{a.count}</div>
-              <div className="text-xs text-muted-foreground">{a.name}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Search */}
-      <Input
-        placeholder="Search prompts..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="max-w-sm"
-      />
-
       {/* Prompts table */}
       <Card>
-        <CardHeader>
-          <CardTitle>
-            {filterAgent ? `${filterAgent} Prompts` : 'All Prompts'} ({filtered.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="text-muted-foreground py-8 text-center">Loading prompts...</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Tier</TableHead>
-                  <TableHead>Versions</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Updated</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <Bot className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-mono text-sm">{p.agentName || '—'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{p.name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{p.slug}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{p.category}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">{p.model || '—'}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{p._count.versions}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={p.isActive ? 'low' : 'critical'}
-                        className="cursor-pointer"
-                        onClick={() => toggleActive(p)}
-                      >
-                        {p.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(p.updatedAt).toLocaleDateString()}
-                      {p.updatedBy && (
-                        <div className="text-xs">by {p.updatedBy}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button size="sm" variant="outline" onClick={() => openEditor(p.id)}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openHistory(p.id)}
-                        disabled={p._count.versions === 0}
-                      >
-                        <History className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No prompts found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
+        <CardContent className="pt-6">
+          <DataTable
+            columns={columns}
+            data={prompts}
+            loading={loading}
+            searchPlaceholder="Search prompts..."
+            emptyIcon={<MessageSquare className="h-12 w-12 text-gray-300 mb-3" />}
+            emptyTitle="No prompts found"
+            emptyDescription="Prompts will appear here when configured."
+          />
         </CardContent>
       </Card>
 

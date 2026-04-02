@@ -2,15 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { DataTable, Column } from '@/components/ui/data-table'
 import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard'
 import {
   FileText,
-  Search,
   Upload,
   Clock,
   CheckCircle,
@@ -60,26 +58,18 @@ export default function DocumentsPage() {
   const router = useRouter()
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
 
-  useEffect(() => {
-    const params = new URLSearchParams()
-    if (statusFilter) params.set('status', statusFilter)
-    fetch(`/api/documents?${params}`)
+  const fetchDocuments = () => {
+    setLoading(true)
+    fetch('/api/documents')
       .then((r) => r.json())
       .then((data) => setDocuments(Array.isArray(data) ? data : []))
       .catch(() => setDocuments([]))
       .finally(() => setLoading(false))
-  }, [statusFilter])
+  }
 
-  const filtered = documents.filter((d) =>
-    !search ||
-    d.vendor.name.toLowerCase().includes(search.toLowerCase()) ||
-    d.documentName.toLowerCase().includes(search.toLowerCase()) ||
-    d.documentType.toLowerCase().includes(search.toLowerCase())
-  )
+  useEffect(() => { fetchDocuments() }, [])
 
   const total = documents.length
   const analyzed = documents.filter((d) => d.status === 'ANALYZED').length
@@ -96,6 +86,8 @@ export default function DocumentsPage() {
       key: 'documentName',
       header: 'Document',
       sortable: true,
+      filterable: true,
+      filterValue: (row) => typeLabel(row.documentType),
       render: (row) => (
         <div>
           <div className="font-medium">{row.documentName}</div>
@@ -107,6 +99,8 @@ export default function DocumentsPage() {
       key: 'vendor.name',
       header: 'Vendor',
       sortable: true,
+      filterable: true,
+      filterValue: (row) => row.vendor.name,
       render: (row) => (
         <div className="flex items-center gap-2">
           <Building2 className="h-4 w-4 text-gray-400" />
@@ -118,6 +112,7 @@ export default function DocumentsPage() {
       key: 'status',
       header: 'Status',
       sortable: true,
+      filterable: true,
       render: (row) => (
         <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
       ),
@@ -126,18 +121,23 @@ export default function DocumentsPage() {
       key: 'fileSize',
       header: 'Size',
       sortable: true,
+      searchable: false,
       render: (row) => formatFileSize(row.fileSize),
     },
     {
       key: '_count.riskFindings',
       header: 'Findings',
       sortable: true,
+      searchable: false,
       className: 'text-center',
       render: (row) => row._count.riskFindings,
     },
     {
       key: 'retrievedBy',
       header: 'Source',
+      sortable: true,
+      filterable: true,
+      filterValue: (row) => row.retrievedBy || row.source || 'Unknown',
       render: (row) => (
         <span className="text-sm">
           {row.retrievedBy ? (
@@ -152,12 +152,14 @@ export default function DocumentsPage() {
       key: 'uploadDate',
       header: 'Uploaded',
       sortable: true,
+      searchable: false,
       render: (row) => new Date(row.uploadDate).toLocaleDateString(),
     },
     {
       key: 'expirationDate',
       header: 'Expires',
       sortable: true,
+      searchable: false,
       render: (row) => {
         if (!row.expirationDate) return <span className="text-gray-400">—</span>
         const exp = new Date(row.expirationDate)
@@ -189,22 +191,12 @@ export default function DocumentsPage() {
       <OnboardingWizard
         open={showOnboarding}
         onClose={() => setShowOnboarding(false)}
-        onComplete={() => {
-          // Refresh documents list
-          setLoading(true)
-          const params = new URLSearchParams()
-          if (statusFilter) params.set('status', statusFilter)
-          fetch(`/api/documents?${params}`)
-            .then((r) => r.json())
-            .then((data) => setDocuments(Array.isArray(data) ? data : []))
-            .catch(() => setDocuments([]))
-            .finally(() => setLoading(false))
-        }}
+        onComplete={() => fetchDocuments()}
       />
 
-      {/* Summary cards */}
+      {/* Summary cards (informational only) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:border-blue-300" onClick={() => setStatusFilter('')}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -215,7 +207,7 @@ export default function DocumentsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:border-green-300" onClick={() => setStatusFilter('ANALYZED')}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -226,7 +218,7 @@ export default function DocumentsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:border-yellow-300" onClick={() => setStatusFilter('PENDING')}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -252,29 +244,12 @@ export default function DocumentsPage() {
 
       {/* Table */}
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search documents..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            {statusFilter && (
-              <Button variant="ghost" size="sm" onClick={() => setStatusFilter('')}>
-                Clear filter
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <DataTable
             columns={columns}
-            data={filtered}
+            data={documents}
             loading={loading}
+            searchPlaceholder="Search documents..."
             emptyIcon={<FileText className="h-12 w-12 text-gray-300 mb-3" />}
             emptyTitle="No documents yet"
             emptyDescription="Documents will appear here when uploaded or retrieved by DORA."

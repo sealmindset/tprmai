@@ -6,14 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTable, Column } from '@/components/ui/data-table'
 import { Users, Plus, Shield } from 'lucide-react'
 
 interface UserRow {
@@ -95,7 +88,83 @@ export default function UserManagementPage() {
     }
   }
 
-  if (loading) return <div className="text-gray-500">Loading users...</div>
+  const columns: Column<UserRow>[] = [
+    {
+      key: 'name',
+      header: 'User',
+      sortable: true,
+      render: (row) => (
+        <div>
+          <p className="font-medium">{row.name || '—'}</p>
+          <p className="text-xs text-gray-500">{row.email}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'role.name',
+      header: 'Role',
+      sortable: true,
+      filterable: true,
+      filterValue: (row) => row.role.name,
+      render: (row) =>
+        canEdit ? (
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={row.role.id}
+            onChange={(e) => handleRoleChange(row.id, e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-sm">
+            <Shield className="h-3 w-3" /> {row.role.name}
+          </span>
+        ),
+    },
+    {
+      key: 'isActive',
+      header: 'Status',
+      filterable: true,
+      filterValue: (row) => row.isActive ? 'Active' : 'Inactive',
+      render: (row) => (
+        <Badge variant={row.isActive ? 'low' : 'critical'}>
+          {row.isActive ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'lastLogin',
+      header: 'Last Login',
+      sortable: true,
+      render: (row) => (
+        <span className="text-gray-500">
+          {row.lastLogin ? new Date(row.lastLogin).toLocaleDateString() : 'Never'}
+        </span>
+      ),
+    },
+    ...(canEdit
+      ? [{
+          key: 'actions',
+          header: '',
+          className: 'text-right',
+          render: (row: UserRow) => (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleToggleActive(row.id, row.isActive)
+              }}
+            >
+              {row.isActive ? 'Deactivate' : 'Reactivate'}
+            </Button>
+          ),
+        } as Column<UserRow>]
+      : []),
+  ]
 
   return (
     <div className="space-y-6">
@@ -142,87 +211,29 @@ export default function UserManagementPage() {
               >
                 <option value="">Select role...</option>
                 {roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
+                  <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </select>
             </div>
             <div className="flex gap-2">
               <Button onClick={handleAddUser}>Add</Button>
-              <Button variant="outline" onClick={() => setShowAdd(false)}>
-                Cancel
-              </Button>
+              <Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
             </div>
           </CardContent>
         </Card>
       )}
 
       <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Login</TableHead>
-                {canEdit && <TableHead className="text-right">Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{u.name || '—'}</p>
-                      <p className="text-xs text-gray-500">{u.email}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {canEdit ? (
-                      <select
-                        className="border rounded px-2 py-1 text-sm"
-                        value={u.role.id}
-                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                      >
-                        {roles.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-sm">
-                        <Shield className="h-3 w-3" /> {u.role.name}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={u.isActive ? 'low' : 'critical'}>
-                      {u.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-gray-500">
-                    {u.lastLogin
-                      ? new Date(u.lastLogin).toLocaleDateString()
-                      : 'Never'}
-                  </TableCell>
-                  {canEdit && (
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleActive(u.id, u.isActive)}
-                      >
-                        {u.isActive ? 'Deactivate' : 'Reactivate'}
-                      </Button>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className="pt-6">
+          <DataTable
+            columns={columns}
+            data={users}
+            loading={loading}
+            searchPlaceholder="Search users..."
+            emptyIcon={<Users className="h-12 w-12 text-gray-300 mb-3" />}
+            emptyTitle="No users"
+            emptyDescription="Users will appear here when they sign in."
+          />
         </CardContent>
       </Card>
     </div>

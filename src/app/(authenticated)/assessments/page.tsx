@@ -2,17 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { DataTable, Column } from '@/components/ui/data-table'
 import {
   ClipboardCheck,
-  Search,
-  Filter,
   Calendar,
   Building2,
+  Filter,
 } from 'lucide-react'
 
 interface Assessment {
@@ -54,23 +51,14 @@ export default function AssessmentsPage() {
   const router = useRouter()
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
 
   useEffect(() => {
-    const params = new URLSearchParams()
-    if (statusFilter) params.set('status', statusFilter)
-    fetch(`/api/assessments?${params}`)
+    fetch('/api/assessments')
       .then((r) => r.json())
       .then((data) => setAssessments(Array.isArray(data) ? data : []))
       .catch(() => setAssessments([]))
       .finally(() => setLoading(false))
-  }, [statusFilter])
-
-  const filtered = assessments.filter((a) =>
-    !search || a.vendor.name.toLowerCase().includes(search.toLowerCase()) ||
-    a.assessmentType.toLowerCase().includes(search.toLowerCase())
-  )
+  }, [])
 
   // Summary counts
   const total = assessments.length
@@ -83,6 +71,8 @@ export default function AssessmentsPage() {
       key: 'vendor.name',
       header: 'Vendor',
       sortable: true,
+      filterable: true,
+      filterValue: (row) => row.vendor.name,
       render: (row) => (
         <div className="flex items-center gap-2">
           <Building2 className="h-4 w-4 text-gray-400" />
@@ -94,12 +84,16 @@ export default function AssessmentsPage() {
       key: 'assessmentType',
       header: 'Type',
       sortable: true,
+      filterable: true,
+      filterValue: (row) => typeLabel(row.assessmentType),
       render: (row) => typeLabel(row.assessmentType),
     },
     {
       key: 'assessmentStatus',
       header: 'Status',
       sortable: true,
+      filterable: true,
+      filterValue: (row) => row.assessmentStatus.replace(/_/g, ' '),
       render: (row) => (
         <Badge variant={statusVariant(row.assessmentStatus)}>
           {row.assessmentStatus.replace(/_/g, ' ')}
@@ -110,6 +104,8 @@ export default function AssessmentsPage() {
       key: 'riskRating',
       header: 'Risk Rating',
       sortable: true,
+      filterable: true,
+      filterValue: (row) => row.riskRating || 'Not Rated',
       render: (row) =>
         row.riskRating ? (
           <Badge variant={ratingVariant(row.riskRating)}>{row.riskRating}</Badge>
@@ -121,6 +117,7 @@ export default function AssessmentsPage() {
       key: 'overallAssessmentScore',
       header: 'Score',
       sortable: true,
+      searchable: false,
       className: 'text-center',
       render: (row) =>
         row.overallAssessmentScore != null ? (
@@ -133,18 +130,23 @@ export default function AssessmentsPage() {
       key: '_count.riskFindings',
       header: 'Findings',
       sortable: true,
+      searchable: false,
       className: 'text-center',
       render: (row) => row._count.riskFindings,
     },
     {
       key: 'assessedBy',
       header: 'Assessed By',
+      sortable: true,
+      filterable: true,
+      filterValue: (row) => row.assessedBy || 'Unassigned',
       render: (row) => row.assessedBy || <span className="text-gray-400">—</span>,
     },
     {
       key: 'assessmentDate',
       header: 'Date',
       sortable: true,
+      searchable: false,
       render: (row) =>
         row.assessmentDate
           ? new Date(row.assessmentDate).toLocaleDateString()
@@ -161,9 +163,9 @@ export default function AssessmentsPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards (informational only) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:border-blue-300" onClick={() => setStatusFilter('')}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -174,7 +176,7 @@ export default function AssessmentsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:border-yellow-300" onClick={() => setStatusFilter('IN_PROGRESS')}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -185,7 +187,7 @@ export default function AssessmentsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:border-orange-300" onClick={() => setStatusFilter('PENDING_REVIEW')}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -196,7 +198,7 @@ export default function AssessmentsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:border-green-300" onClick={() => setStatusFilter('COMPLETE')}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -211,29 +213,12 @@ export default function AssessmentsPage() {
 
       {/* Table */}
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search vendor or type..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            {statusFilter && (
-              <Button variant="ghost" size="sm" onClick={() => setStatusFilter('')}>
-                Clear filter
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <DataTable
             columns={columns}
-            data={filtered}
+            data={assessments}
             loading={loading}
+            searchPlaceholder="Search assessments..."
             emptyIcon={<ClipboardCheck className="h-12 w-12 text-gray-300 mb-3" />}
             emptyTitle="No assessments yet"
             emptyDescription="Assessments will appear here when CARA analyzes vendor risk."
