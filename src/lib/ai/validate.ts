@@ -129,15 +129,30 @@ export const REPORT_RULES: ValidationRule[] = [
  */
 export function safeParseJSON<T>(text: string): { success: true; data: T } | { success: false; error: string } {
   try {
-    // Extract JSON from markdown code blocks if present
-    let jsonStr = text
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-    if (jsonMatch) {
-      jsonStr = jsonMatch[1]
-    }
-    const data = JSON.parse(jsonStr.trim()) as T
+    // 1. Try raw parse first (fastest path)
+    const data = JSON.parse(text.trim()) as T
     return { success: true, data }
-  } catch (error) {
-    return { success: false, error: `Failed to parse AI response as JSON: ${error instanceof Error ? error.message : 'unknown error'}` }
+  } catch {
+    // 2. Extract from markdown code blocks (```json ... ``` or ``` ... ```)
+    try {
+      let jsonStr = text
+      const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1]
+      } else {
+        // 3. Strip leading/trailing backticks and language tags aggressively
+        jsonStr = text.replace(/^[`\s]*(?:json)?\s*/i, '').replace(/[`\s]*$/i, '')
+      }
+      // 4. Find the first { or [ and last } or ] to isolate JSON
+      const start = jsonStr.search(/[{[]/)
+      const end = Math.max(jsonStr.lastIndexOf('}'), jsonStr.lastIndexOf(']'))
+      if (start !== -1 && end !== -1 && end >= start) {
+        jsonStr = jsonStr.substring(start, end + 1)
+      }
+      const data = JSON.parse(jsonStr.trim()) as T
+      return { success: true, data }
+    } catch (error) {
+      return { success: false, error: `Failed to parse AI response as JSON: ${error instanceof Error ? error.message : 'unknown error'}` }
+    }
   }
 }
