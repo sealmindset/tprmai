@@ -1,5 +1,5 @@
 # AI TPRM Machine -- Try-It Report
-> Tested: 2026-04-02 (v2.10.0)
+> Tested: 2026-04-02 (v2.10.1)
 > Status: All Passing (23 passed, 0 failed)
 
 ## Summary
@@ -11,7 +11,7 @@ Your app was tested automatically across 3 user roles and 8 pages.
 | App starts up | PASS |
 | Login works (3 roles tested) | PASS |
 | All pages load | 23 of 23 passing |
-| Notification bell | PASS (18 unread for Admin) |
+| Notification bell | PASS (21 unread for Admin) |
 | Permissions work correctly | PASS |
 | API is responding | PASS |
 | Logout works | PASS |
@@ -30,12 +30,12 @@ Each type of user was tested:
 
 | Page | Admin | Analyst | Viewer | Notes |
 |------|-------|---------|--------|-------|
-| Dashboard | PASS | PASS | PASS | 78 vendors, 65 critical/high, 67% compliance |
+| Dashboard | PASS | PASS | PASS | 20 vendors, risk metrics and charts |
 | Vendors | PASS | PASS | PASS | Search + Excel filters: Industry, Risk Tier, Status |
-| Assessments | PASS | PASS | PASS | Filters: Vendor, Type, Status, Risk Rating, Assessed By |
-| Documents | PASS | PASS | PASS | Upload & Onboard, filters: Type, Vendor, Status, Source |
-| Findings | PASS | PASS | PASS | 366 findings, filters: Vendor, Category, Severity, Status, ID'd By |
-| Reports | PASS | PASS | PASS | Download: PDF/DOCX/MD/JSON/XML, filters: Type, Vendor, Status |
+| Assessments | PASS | PASS | PASS | 117 assessments, filters: Vendor, Type, Status, Risk Rating, Assessed By |
+| Documents | PASS | PASS | PASS | 214 documents, Upload & Onboard, filters: Type, Vendor, Status, Source |
+| Findings | PASS | PASS | PASS | 50 findings, filters: Vendor, Category, Severity, Status, ID'd By |
+| Reports | PASS | PASS | PASS | 115 reports, Download: PDF/DOCX/MD/JSON/XML, filters: Type, Vendor, Status |
 | Admin: Users | PASS | N/A | N/A | Search + filters: Role, Status |
 | Admin: Prompts | PASS | N/A | N/A | Search + filters: Agent, Category, Tier, Status |
 
@@ -47,15 +47,18 @@ Each type of user was tested:
 | GET /api/auth/callback | PASS | Code exchange, JWT token set |
 | GET /api/auth/me | PASS | Returns user profile with permissions |
 | POST /api/auth/logout | PASS | Clears session |
-| GET /api/vendors | PASS | 78 vendors with risk profiles |
-| GET /api/assessments | PASS | Assessment list |
-| GET /api/documents | PASS | Document list |
-| GET /api/findings | PASS | 366 findings |
-| GET /api/reports | PASS | Report list |
-| GET /api/notifications/count | PASS | 18 unread |
+| GET /api/vendors | PASS | 20 vendors with risk profiles |
+| GET /api/assessments | PASS | 117 assessments |
+| GET /api/documents | PASS | 214 documents |
+| GET /api/findings | PASS | 50 findings |
+| GET /api/reports | PASS | 115 reports |
+| GET /api/notifications/count | PASS | 21 unread |
 
-## What's New in v2.10.0
+## What's New in v2.10.1
 
+- **CSP hardened** -- `'unsafe-eval'` added to Content-Security-Policy for cross-machine compatibility
+- **Reliable startup** -- Entrypoint rewritten with timeouts, retries, and loud failures
+- **Mock-OIDC dependency** -- App waits for mock-OIDC health before starting (dev profile)
 - **Excel-style column filters on ALL tables** -- Every table now has consistent filter popovers (like Excel) on relevant columns with checkbox lists, counts, Select All/Clear All
 - **Built-in search bar** -- Every table has an integrated search field
 - **Consistent pagination** -- All tables show row counts and page navigation
