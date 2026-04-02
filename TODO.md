@@ -2,7 +2,7 @@
 
 ## High Priority
 
-- [ ] **Environment: Configure AI credentials** - Update AZURE_OPENAI_API_KEY and related settings in .env for AI features (Claude via Azure AI Foundry)
+- [x] ~~**Environment: Configure AI credentials** - Azure AI Foundry endpoint + API key configured, all 3 model tiers verified~~
 
 ## Medium Priority
 

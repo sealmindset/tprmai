@@ -2,6 +2,15 @@
 
 All notable changes to AI TPRM Machine will be documented in this file.
 
+## [2.5.0] - 2026-04-01
+
+### Changed
+- **AI Provider**: Rewrote `anthropic_foundry` provider to use the Anthropic SDK instead of raw OpenAI-compatible fetch calls
+- **Dual-mode auth**: API key (AZURE_AI_FOUNDRY_API_KEY) is used when set; falls back to DefaultAzureCredential (Entra ID) when empty
+- **Env var naming**: Renamed AZURE_OPENAI_* to AZURE_AI_FOUNDRY_* to match actual Anthropic endpoint
+- **Docker Compose**: AI provider env vars now passed through to the app container (were commented out)
+- **Model deployments**: Configured for Sleep Number Azure AI Foundry (Opus 4.5, Sonnet 4.5, Haiku 4.5)
+
 ## [2.4.0] - 2026-03-20
 
 ### Removed

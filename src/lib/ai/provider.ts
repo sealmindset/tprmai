@@ -2,13 +2,15 @@
  * Multi-provider AI abstraction.
  *
  * Supports:
- *   - anthropic_foundry: Claude via Azure AI Foundry (Entra ID auth)
+ *   - anthropic_foundry: Claude via Azure AI Foundry (API key or Entra ID auth)
  *   - claude:            Direct Anthropic API
  *   - openai:            OpenAI API
  *   - ollama:            Local Ollama instance
  *
  * Selected by AI_PROVIDER env var. Model selected by tier (complex/standard/simple).
  */
+
+import Anthropic from '@anthropic-ai/sdk'
 
 // ============================================
 // Types
@@ -56,7 +58,7 @@ function getModelForTier(tier: ModelTier): string {
 
 function getFallbackModel(): string {
   return (
-    process.env.AZURE_OPENAI_FALLBACK_DEPLOYMENT_NAME || 'claude-opus-4-5'
+    process.env.AZURE_AI_FOUNDRY_FALLBACK_MODEL || 'claude-opus-4-5'
   )
 }
 
@@ -64,88 +66,117 @@ function getFallbackModel(): string {
 // Provider Implementations
 // ============================================
 
+/**
+ * Azure AI Foundry with Claude — uses the Anthropic SDK.
+ *
+ * Auth priority:
+ *   1. API key (AZURE_AI_FOUNDRY_API_KEY) — simplest, works everywhere
+ *   2. DefaultAzureCredential fallback — Managed Identity (prod) or az login (dev)
+ */
 async function callAzureFoundry(
   messages: ChatMessage[],
   options: ChatOptions
 ): Promise<ChatResponse> {
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT
+  const endpoint = process.env.AZURE_AI_FOUNDRY_ENDPOINT
   if (!endpoint) {
     throw new Error(
-      'AZURE_OPENAI_ENDPOINT is required for anthropic_foundry provider'
+      'AZURE_AI_FOUNDRY_ENDPOINT is required for anthropic_foundry provider. ' +
+      'Set it to your Azure AI Foundry Anthropic endpoint (e.g., https://your-resource.services.ai.azure.com/anthropic)'
     )
   }
 
-  const model = getModelForTier(options.tier || 'standard')
-  const apiVersion =
-    process.env.AZURE_OPENAI_API_VERSION || '2024-08-01-preview'
-  const url = `${endpoint}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`
-
-  // Get Entra ID token
-  const { DefaultAzureCredential } = await import('@azure/identity')
-  const credential = new DefaultAzureCredential()
-  const tokenResponse = await credential.getToken(
-    'https://cognitiveservices.azure.com/.default'
-  )
-
-  const body = {
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    temperature: options.temperature ?? 0.3,
-    max_tokens: options.maxTokens ?? 4096,
+  // Resolve API key: explicit key first, then Entra ID fallback
+  let apiKey = process.env.AZURE_AI_FOUNDRY_API_KEY
+  if (!apiKey) {
+    console.info('[AI] No AZURE_AI_FOUNDRY_API_KEY set — falling back to DefaultAzureCredential')
+    const { DefaultAzureCredential } = await import('@azure/identity')
+    const credential = new DefaultAzureCredential()
+    const tokenResponse = await credential.getToken(
+      'https://cognitiveservices.azure.com/.default'
+    )
+    apiKey = tokenResponse.token
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${tokenResponse.token}`,
-    },
-    body: JSON.stringify(body),
+  const model = getModelForTier(options.tier || 'standard')
+
+  // Separate system message from conversation
+  const systemMsg = messages.find((m) => m.role === 'system')
+  const nonSystemMsgs = messages.filter((m) => m.role !== 'system')
+
+  const client = new Anthropic({
+    apiKey,
+    baseURL: endpoint,
   })
 
-  if (!res.ok) {
-    const errText = await res.text()
-    // Try fallback model
+  try {
+    const response = await client.messages.create({
+      model,
+      max_tokens: options.maxTokens ?? 4096,
+      temperature: options.temperature ?? 0.3,
+      system: systemMsg
+        ? (typeof systemMsg.content === 'string' ? systemMsg.content : '')
+        : undefined,
+      messages: nonSystemMsgs.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: typeof m.content === 'string' ? m.content : m.content.map(c => c.text || '').join(''),
+      })),
+    })
+
+    const content = response.content?.[0]?.type === 'text'
+      ? response.content[0].text
+      : ''
+
+    return {
+      content,
+      model,
+      usage: response.usage
+        ? {
+            inputTokens: response.usage.input_tokens,
+            outputTokens: response.usage.output_tokens,
+          }
+        : undefined,
+    }
+  } catch (err: unknown) {
+    // Try fallback model on failure
     if (options.tier) {
-      console.warn(
-        `[AI] Primary model ${model} failed (${res.status}), trying fallback`
-      )
       const fallbackModel = getFallbackModel()
-      const fallbackUrl = `${endpoint}/openai/deployments/${fallbackModel}/chat/completions?api-version=${apiVersion}`
-      const fallbackRes = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${tokenResponse.token}`,
-        },
-        body: JSON.stringify(body),
-      })
-      if (fallbackRes.ok) {
-        const data = await fallbackRes.json()
-        return {
-          content: data.choices[0].message.content,
+      console.warn(
+        `[AI] Primary model ${model} failed, trying fallback ${fallbackModel}:`,
+        err instanceof Error ? err.message : err
+      )
+      try {
+        const response = await client.messages.create({
           model: fallbackModel,
-          usage: data.usage
+          max_tokens: options.maxTokens ?? 4096,
+          temperature: options.temperature ?? 0.3,
+          system: systemMsg
+            ? (typeof systemMsg.content === 'string' ? systemMsg.content : '')
+            : undefined,
+          messages: nonSystemMsgs.map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: typeof m.content === 'string' ? m.content : m.content.map(c => c.text || '').join(''),
+          })),
+        })
+
+        const content = response.content?.[0]?.type === 'text'
+          ? response.content[0].text
+          : ''
+
+        return {
+          content,
+          model: fallbackModel,
+          usage: response.usage
             ? {
-                inputTokens: data.usage.prompt_tokens,
-                outputTokens: data.usage.completion_tokens,
+                inputTokens: response.usage.input_tokens,
+                outputTokens: response.usage.output_tokens,
               }
             : undefined,
         }
+      } catch {
+        // Fallback also failed — throw the original error
       }
     }
-    throw new Error(`Azure AI Foundry request failed: ${res.status} ${errText}`)
-  }
-
-  const data = await res.json()
-  return {
-    content: data.choices[0].message.content,
-    model,
-    usage: data.usage
-      ? {
-          inputTokens: data.usage.prompt_tokens,
-          outputTokens: data.usage.completion_tokens,
-        }
-      : undefined,
+    throw err
   }
 }
 

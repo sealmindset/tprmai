@@ -18,10 +18,14 @@ services:
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-mock-oidc-client}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-mock-oidc-secret}
       - JWT_SECRET=${JWT_SECRET:-docker-dev-jwt-secret-not-for-production}
-      # AI Provider (wired in Phase C)
-      # - AI_PROVIDER=anthropic_foundry
-      # - AZURE_OPENAI_ENDPOINT=
-      # - AZURE_OPENAI_DEPLOYMENT_NAME=
+      # AI Provider
+      - AI_PROVIDER=${AI_PROVIDER:-anthropic_foundry}
+      - AZURE_AI_FOUNDRY_ENDPOINT=${AZURE_AI_FOUNDRY_ENDPOINT:-}
+      - AZURE_AI_FOUNDRY_API_KEY=${AZURE_AI_FOUNDRY_API_KEY:-}
+      - AI_MODEL_COMPLEX=${AI_MODEL_COMPLEX:-}
+      - AI_MODEL_STANDARD=${AI_MODEL_STANDARD:-}
+      - AI_MODEL_SIMPLE=${AI_MODEL_SIMPLE:-}
+      - AZURE_AI_FOUNDRY_FALLBACK_MODEL=${AZURE_AI_FOUNDRY_FALLBACK_MODEL:-}
     depends_on:
       db:
         condition: service_healthy
