@@ -26,6 +26,10 @@ services:
       - AI_MODEL_STANDARD=${AI_MODEL_STANDARD:-}
       - AI_MODEL_SIMPLE=${AI_MODEL_SIMPLE:-}
       - AZURE_AI_FOUNDRY_FALLBACK_MODEL=${AZURE_AI_FOUNDRY_FALLBACK_MODEL:-}
+      - DOCUMENTS_PATH=/app/data/documents
+      - UPLOAD_CACHE_PATH=/app/data/uploads
+    volumes:
+      - tprmai-documents:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -78,3 +82,4 @@ services:
 
 volumes:
   tprmai-pgdata:
+  tprmai-documents:

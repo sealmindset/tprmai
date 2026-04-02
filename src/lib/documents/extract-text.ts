@@ -1,11 +1,14 @@
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 
-// Lazy import pdf-parse to avoid build-time file loading issues
-const pdfParse = async (buffer: Buffer) => {
-  const pdf = await import('pdf-parse')
-  return pdf.default(buffer)
-}
+// Import pdf-parse/lib/pdf-parse directly to bypass index.js debug wrapper
+// that tries to Fs.readFileSync('./test/data/05-versions-space.pdf') --
+// a file that doesn't exist in Next.js standalone production builds.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParseLib = require('pdf-parse/lib/pdf-parse') as (
+  buffer: Buffer,
+  options?: Record<string, unknown>
+) => Promise<{ text: string; numpages: number }>
 
 export type FileType = 'pdf' | 'docx' | 'xlsx' | 'image' | 'text'
 
@@ -16,11 +19,11 @@ export interface ExtractedContent {
   imageMime?: string
 }
 
-/** Extract text from PDF using pdf-parse */
+/** Extract text from PDF using pdf-parse (lib direct import) */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
-    const data = await pdfParse(buffer)
-    return (data as { text: string }).text
+    const data = await pdfParseLib(buffer)
+    return data.text
   } catch (error) {
     console.error('PDF extraction error:', error)
     throw new Error('Failed to extract PDF content')
